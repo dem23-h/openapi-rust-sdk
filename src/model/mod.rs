@@ -5,6 +5,7 @@ pub mod contract;
 pub mod order;
 pub mod position;
 pub mod quote;
+pub mod serde_helpers;
 pub mod trade;
 
 // Re-export commonly used types at the model module root.
