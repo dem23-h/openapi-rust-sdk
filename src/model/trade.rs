@@ -244,13 +244,23 @@ pub struct Transaction {
     #[serde(default)]
     pub commission: f64,
     /// 成交时间字符串，格式 "YYYY-MM-DD HH:MM:SS"（服务端返回字符串，非时间戳）
-    #[serde(default)]
+    // Lenient so a null or numeric value can't fail the whole list.
+    #[serde(
+        default,
+        deserialize_with = "crate::model::serde_helpers::deserialize_lenient_string"
+    )]
     pub transacted_at: String,
     /// 成交时间毫秒时间戳
     #[serde(default)]
     pub transaction_time: i64,
     /// 兼容旧字段
-    #[serde(default)]
+    // Tiger paper has been observed returning this as a
+    // "YYYY-MM-DD HH:MM:SS" date string instead of epoch ms.
+    // The lenient deserializer accepts both shapes.
+    #[serde(
+        default,
+        deserialize_with = "crate::model::serde_helpers::deserialize_lenient_timestamp"
+    )]
     pub time: i64,
 }
 
@@ -743,5 +753,45 @@ mod tests {
         assert_eq!(t.filled_amount, 14950.0);
         assert_eq!(t.transacted_at, "2024-01-15 10:30:00");
         assert_eq!(t.transaction_time, 1705314600000);
+    }
+
+    /// Regression: Tiger paper has been observed returning `time` as a
+    /// "YYYY-MM-DD HH:MM:SS" string (no timezone) instead of epoch ms.
+    /// Without the lenient deserializer, decoding a `Vec<Transaction>`
+    /// with one such entry fails the entire batch with
+    /// `invalid type: string ..., expected i64`.
+    #[test]
+    fn test_transaction_string_timestamp_deserializes() {
+        let json = r#"{"id":1,"orderId":2,"symbol":"AAPL","secType":"STK","price":150.0,"quantity":100,"filledQuantity":100,"transactedAt":"2026-05-08 22:57:14","time":"2026-05-08 22:57:14"}"#;
+        let t: Transaction = serde_json::from_str(json).unwrap();
+        assert_eq!(t.transacted_at, "2026-05-08 22:57:14");
+        assert_eq!(t.time, 1_778_281_034_000);
+    }
+
+    /// Regression: a `Vec<Transaction>` with a mix of epoch-ms and
+    /// string-formatted entries must decode end-to-end. This is the
+    /// exact shape `call_into_items::<Transaction>` chokes on.
+    #[test]
+    fn test_vec_transaction_mixed_timestamp_shapes() {
+        let json = r#"[
+            {"id":1,"orderId":10,"time":1700000000000},
+            {"id":2,"orderId":11,"transactedAt":"2026-05-08 22:57:14","time":"2026-05-08 22:57:14"}
+        ]"#;
+        let v: Vec<Transaction> = serde_json::from_str(json).unwrap();
+        assert_eq!(v.len(), 2);
+        assert_eq!(v[0].time, 1_700_000_000_000);
+        assert_eq!(v[1].time, 1_778_281_034_000);
+    }
+
+    /// A null or numeric `transactedAt` must not fail the batch either.
+    #[test]
+    fn test_vec_transaction_odd_transacted_at_shapes() {
+        let json = r#"[
+            {"id":1,"orderId":10,"transactedAt":null,"transactionTime":1700000000000},
+            {"id":2,"orderId":11,"transactedAt":1700000000000,"transactionTime":1700000000000}
+        ]"#;
+        let v: Vec<Transaction> = serde_json::from_str(json).unwrap();
+        assert_eq!(v[0].transacted_at, "");
+        assert_eq!(v[1].transacted_at, "1700000000000");
     }
 }
