@@ -334,6 +334,33 @@ fn test_heartbeat_response_ignored() {
 }
 
 #[test]
+fn test_heartbeat_response_invokes_callback() {
+    let client = PushClient::new(test_config(), None);
+    let count = Arc::new(AtomicI32::new(0));
+    let count_clone = count.clone();
+    client.set_callbacks(Callbacks {
+        on_heartbeat: Some(Arc::new(move || {
+            count_clone.fetch_add(1, Ordering::SeqCst);
+        })),
+        ..Default::default()
+    });
+
+    let response = pb::Response {
+        command: Command::Heartbeat as i32,
+        id: Some(9),
+        code: None,
+        msg: None,
+        body: None,
+    };
+    client.handle_message(&encode_response(&response));
+    assert_eq!(count.load(Ordering::SeqCst), 1);
+
+    // A second heartbeat invokes it again — not a one-shot callback.
+    client.handle_message(&encode_response(&response));
+    assert_eq!(count.load(Ordering::SeqCst), 2);
+}
+
+#[test]
 fn test_invalid_protobuf_triggers_error() {
     let client = PushClient::new(test_config(), None);
     let count = Arc::new(AtomicI32::new(0));

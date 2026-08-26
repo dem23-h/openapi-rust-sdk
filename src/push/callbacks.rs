@@ -30,4 +30,12 @@ pub struct Callbacks {
     pub on_disconnect: Option<Arc<dyn Fn() + Send + Sync>>,
     pub on_error: Option<Arc<dyn Fn(String) + Send + Sync>>,
     pub on_kickout: Option<Arc<dyn Fn(String) + Send + Sync>>,
+    /// Invoked once per decoded heartbeat response received from the
+    /// server. Proof of inbound liveness during an otherwise-quiet
+    /// account — heartbeat responses are received every few seconds
+    /// regardless of subscribed-data activity, so this is the only
+    /// signal that distinguishes a silently-dead connection from a
+    /// healthy one with nothing to report. `None` preserves the
+    /// original silent-ignore behavior.
+    pub on_heartbeat: Option<Arc<dyn Fn() + Send + Sync>>,
 }

@@ -245,7 +245,10 @@ impl PushClient {
                 cb();
             }
         } else if response.command == Command::Heartbeat as i32 {
-            // HEARTBEAT -> ignore
+            // HEARTBEAT -> proof of inbound liveness; trigger on_heartbeat
+            if let Some(cb) = &cbs.on_heartbeat {
+                cb();
+            }
         } else if response.command == Command::Message as i32 {
             // MESSAGE -> extract PushData and dispatch
             if let Some(push_data) = &response.body {
