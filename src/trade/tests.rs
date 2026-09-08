@@ -179,6 +179,78 @@ async fn test_get_orders_unwraps_items_typed() {
 }
 
 #[tokio::test]
+async fn test_get_orders_empty_items_array_is_ok_empty() {
+    // 显式空数组是合法的"确认无数据"，必须继续返回 Ok(空列表)。
+    let server = mock_success_server(r#"{"items":[]}"#).await;
+    let tc = TradeClient::new(HttpClient::new(test_config(&server.uri())), "test_account");
+
+    let orders = tc.get_orders(OrdersRequest::default()).await.unwrap();
+    assert_eq!(orders.len(), 0);
+}
+
+#[tokio::test]
+async fn test_get_orders_null_items_is_ok_empty() {
+    // items:null 是合法的"确认无数据"，必须继续返回 Ok(空列表)。
+    let server = mock_success_server(r#"{"items":null}"#).await;
+    let tc = TradeClient::new(HttpClient::new(test_config(&server.uri())), "test_account");
+
+    let orders = tc.get_orders(OrdersRequest::default()).await.unwrap();
+    assert_eq!(orders.len(), 0);
+}
+
+#[tokio::test]
+async fn test_get_orders_null_data_is_ok_empty() {
+    // 顶层 data:null 是合法的"确认无数据"，必须继续返回 Ok(空列表)。
+    let server = mock_success_server("null").await;
+    let tc = TradeClient::new(HttpClient::new(test_config(&server.uri())), "test_account");
+
+    let orders = tc.get_orders(OrdersRequest::default()).await.unwrap();
+    assert_eq!(orders.len(), 0);
+}
+
+#[tokio::test]
+async fn test_get_orders_object_without_items_field_is_err() {
+    // 回归测试：畸形/意外的对象响应（既没有 items 字段，也不是数组）
+    // 曾经被静默当作"空列表"返回——调用方无法区分"确认无单"和"解析失败"。
+    // 必须返回 Err，绝不能冒充成功的空结果。
+    let server = mock_success_server(r#"{"unexpected":"schema"}"#).await;
+    let tc = TradeClient::new(HttpClient::new(test_config(&server.uri())), "test_account");
+
+    let result = tc.get_orders(OrdersRequest::default()).await;
+    assert!(
+        result.is_err(),
+        "unrecognized object shape must be a decode error, not Ok(empty)"
+    );
+}
+
+#[tokio::test]
+async fn test_get_orders_scalar_data_is_err() {
+    // 回归测试：意外的标量 data（既不是对象也不是数组）必须报错，而不是静默返回空列表。
+    let server = mock_success_server("42").await;
+    let tc = TradeClient::new(HttpClient::new(test_config(&server.uri())), "test_account");
+
+    let result = tc.get_orders(OrdersRequest::default()).await;
+    assert!(
+        result.is_err(),
+        "unrecognized scalar shape must be a decode error, not Ok(empty)"
+    );
+}
+
+#[tokio::test]
+async fn test_get_orders_unparseable_string_data_is_err() {
+    // 回归测试：data 是一个既不是有效 JSON、也不能被识别的字符串时，
+    // 之前会静默 fallback 成空列表。必须报错。
+    let server = mock_success_server(r#""not valid json {{{""#).await;
+    let tc = TradeClient::new(HttpClient::new(test_config(&server.uri())), "test_account");
+
+    let result = tc.get_orders(OrdersRequest::default()).await;
+    assert!(
+        result.is_err(),
+        "unparseable string shape must be a decode error, not Ok(empty)"
+    );
+}
+
+#[tokio::test]
 async fn test_get_filled_orders_unwraps_items_typed() {
     let server =
         mock_success_server(r#"{"items":[{"id":1,"status":"Filled","filledQuantity":50}]}"#).await;

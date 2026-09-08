@@ -31,6 +31,18 @@ use crate::model::trade_requests::{
     PositionTransferRecordsRequest, PositionTransferRequest, PositionsRequest, SegmentFundRequest,
 };
 
+/// 返回 JSON 值的类型名，用于错误消息（不回显具体内容，避免泄露账户数据）。
+fn json_value_kind(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "null",
+        Value::Bool(_) => "bool",
+        Value::Number(_) => "number",
+        Value::String(_) => "unparseable string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object without items field",
+    }
+}
+
 /// 交易客户端
 pub struct TradeClient {
     http_client: HttpClient,
@@ -197,7 +209,13 @@ impl TradeClient {
             return serde_json::from_value::<Vec<T>>(raw)
                 .map_err(|e| TigerError::Config(format!("decode array data failed: {}", e)));
         }
-        Ok(Vec::new())
+        // 无法识别的形状（既不是带 items 的对象，也不是数组，也不是可解析的 JSON 字符串）
+        // 一律视为解码失败，而不是静默返回空列表——调用方依赖"空列表"作为
+        // "服务端确认无数据"的证据，绝不能被畸形/意外响应冒充。
+        Err(TigerError::Parse(format!(
+            "unrecognized collection response shape (expected {{items:[...]}} or a bare array), got JSON kind: {}",
+            json_value_kind(&raw)
+        )))
     }
 
     // ========== 合约查询 ==========
