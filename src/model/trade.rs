@@ -205,6 +205,9 @@ pub struct Transaction {
     pub id: i64,
     #[serde(default)]
     pub order_id: i64,
+    /// Numeric account id; the transactions endpoint sends this, not `account`.
+    #[serde(default)]
+    pub account_id: i64,
     #[serde(default)]
     pub account: String,
     #[serde(default)]
@@ -221,12 +224,21 @@ pub struct Transaction {
     pub action: String,
     #[serde(default)]
     pub price: f64,
+    /// Fill price (server field `filledPrice`), as in upstream 0.4.1.
+    #[serde(default)]
+    pub filled_price: f64,
     #[serde(default)]
     pub quantity: i64,
     #[serde(default)]
     pub filled_quantity: i64,
     #[serde(default)]
+    pub filled_quantity_scale: i32,
+    #[serde(default)]
     pub amount: f64,
+    /// Fill amount (server field `filledAmount`).
+    #[serde(default)]
+    pub filled_amount: f64,
+    /// Not sent by the transactions endpoint; the fee is on the order.
     #[serde(default)]
     pub commission: f64,
     // Tiger paper has been observed returning these as
@@ -237,6 +249,10 @@ pub struct Transaction {
         deserialize_with = "crate::model::serde_helpers::deserialize_lenient_timestamp"
     )]
     pub transacted_at: i64,
+    /// Fill time in epoch ms. Prefer it to `transacted_at`, whose string
+    /// form is UTC+8 but parsed as UTC.
+    #[serde(default)]
+    pub transaction_time: i64,
     #[serde(
         default,
         deserialize_with = "crate::model::serde_helpers::deserialize_lenient_timestamp"
@@ -299,6 +315,19 @@ mod tests {
         assert_eq!(t.order_id, 2);
         assert_eq!(t.sec_type, "STK");
         assert_eq!(t.price, 150.0);
+    }
+
+    /// The transaction record exactly as Tiger's "Order Queries" docs show it.
+    #[test]
+    fn test_transaction_docs_shape_deserializes() {
+        let json = r#"{"id":24653027221308416,"accountId":402901,"orderId":24653027093612544,"secType":"STK","symbol":"CII","currency":"USD","market":"US","action":"BUY","filledQuantity":100,"filledQuantityScale":0,"filledPrice":21.67,"filledAmount":2167.0,"transactedAt":"2021-11-15 22:34:30","transactionTime":1636986870000}"#;
+        let t: Transaction = serde_json::from_str(json).unwrap();
+        assert_eq!(t.account_id, 402901);
+        assert_eq!(t.filled_quantity, 100);
+        assert_eq!(t.filled_price, 21.67);
+        assert_eq!(t.filled_amount, 2167.0);
+        assert_eq!(t.transaction_time, 1_636_986_870_000);
+        assert_eq!(t.commission, 0.0);
     }
 
     /// Regression: Tiger paper has been observed returning `transactedAt`

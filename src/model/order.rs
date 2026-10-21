@@ -453,6 +453,14 @@ mod tests {
     }
 
     #[test]
+    fn test_order_fee_fields_deserialize() {
+        let json = r#"{"id":1,"status":"Filled","commission":1.99,"gst":0.12}"#;
+        let order: Order = serde_json::from_str(json).unwrap();
+        assert_eq!(order.commission, 1.99);
+        assert_eq!(order.gst, 0.12);
+    }
+
+    #[test]
     fn test_market_order_helper() {
         let o = market_order("ACC", "AAPL", "STK", "BUY", 100);
         assert_eq!(o.total_quantity, Some(100));
