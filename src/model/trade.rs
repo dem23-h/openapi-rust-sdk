@@ -755,6 +755,21 @@ mod tests {
         assert_eq!(t.transaction_time, 1705314600000);
     }
 
+    /// The transactions endpoint's documented record shape: fill fields,
+    /// numeric accountId, transactionTime in ms, and no commission.
+    #[test]
+    fn test_transaction_docs_shape_deserializes() {
+        let json = r#"{"id":24653027221308416,"accountId":402901,"orderId":24653027093612544,"secType":"STK","symbol":"CII","currency":"USD","market":"US","action":"BUY","filledQuantity":100,"filledQuantityScale":0,"filledPrice":21.67,"filledAmount":2167.0,"transactedAt":"2021-11-15 22:34:30","transactionTime":1636986870000}"#;
+        let t: Transaction = serde_json::from_str(json).unwrap();
+        assert_eq!(t.account_id, 402901);
+        assert_eq!(t.filled_quantity, 100);
+        assert_eq!(t.filled_price, 21.67);
+        assert_eq!(t.filled_amount, 2167.0);
+        assert_eq!(t.transacted_at, "2021-11-15 22:34:30");
+        assert_eq!(t.transaction_time, 1_636_986_870_000);
+        assert_eq!(t.commission, 0.0);
+    }
+
     /// Regression: Tiger paper has been observed returning `time` as a
     /// "YYYY-MM-DD HH:MM:SS" string (no timezone) instead of epoch ms.
     /// Without the lenient deserializer, decoding a `Vec<Transaction>`
